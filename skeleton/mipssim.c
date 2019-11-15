@@ -27,12 +27,6 @@ static inline uint8_t get_instruction_type(int opcode)
             return EOP_TYPE;
 
         ///@students: fill in the rest
-		case ADD:
-			return R_TYPE;
-		case ADDI:
-			return EOP_TYPE;
-		case LW:
-			return R_TYPE;
 
         default:
             assert(false);
@@ -50,13 +44,9 @@ void FSM()
     memset(control, 0, (sizeof(struct ctrl_signals)));
 
     int opcode = IR_meta->opcode;
-	int state = arch_state.state;
-
-	// States covered:
-	// 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-
+    int state = arch_state.state;
     switch (state) {
-        case INSTR_FETCH: // 0
+        case INSTR_FETCH:
             control->MemRead = 1;
             control->ALUSrcA = 0;
             control->IorD = 0;
@@ -67,65 +57,26 @@ void FSM()
             control->PCSource = 0;
             state = DECODE;
             break;
-        case DECODE: // 1
+        case DECODE:
             control->ALUSrcA = 0;
             control->ALUSrcB = 3;
             control->ALUOp = 0;
             if (IR_meta->type == R_TYPE) state = EXEC;
             else if (opcode == EOP) state = EXIT_STATE;
-            else if(opcode == LW || opcode == SW) state = MEM_ADDR_COMP;
-			else if(opcode == BEQ) state = BRANCH_COMPL;
-			else if(opcode == J) state = JUMP_COMPL;
-			else assert(false);
+            else assert(false);
             break;
-        case EXEC: // 6
+        case EXEC:
             control->ALUSrcA = 1;
             control->ALUSrcB = 0;
             control->ALUOp = 2;
             state = R_TYPE_COMPL;
             break;
-        case R_TYPE_COMPL: // 7
+        case R_TYPE_COMPL:
             control->RegDst = 1;
             control->RegWrite = 1;
             control->MemtoReg = 0;
             state = INSTR_FETCH;
             break;
-		case BRANCH_COMPL: // 8
-			control->ALUSrcA = 1;
-			control->ALUSrcB = 0;
-			control->ALUOp = 1;
-			control->PCWriteCond = 1;
-			control->PCSource = 1;
-			state = INSTR_FETCH;
-			break;
-		case JUMP_COMPL: // 9
-			control->PCWrite = 1;
-			control->PCSource = 2;
-			state = INSTR_FETCH;
-			break;
-		case MEM_ADDR_COMP: // 2
-			control->ALUSrcA = 1;
-			control->ALUSrcB = 2;
-			control->ALUOp = 0;
-			if(opcode == LW) state = MEM_ACCESS_LD;
-			else if(opcode == SW) state = MEM_ACCESS_ST;
-			else assert(false);
-			break;
-		case MEM_ACCESS_LD: // 3
-			control->IorD = 1;
-			state = WB_STEP;
-			break;
-		case MEM_ACCESS_ST: // 5
-			control->IorD = 1;
-			state = INSTR_FETCH;
-			break;
-		case WB_STEP: // 4
-			control->RegDst = 0;
-			control->RegWrite = 1;
-			control->MemtoReg = 1;
-			state = INSTR_FETCH;
-			break;
-
         default: assert(false);
     }
     arch_state.state = state;
