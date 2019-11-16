@@ -7,7 +7,17 @@
 #include "mipssim.h"
 
 /// @students: declare cache-related structures and variables here
+struct Cache {
+	uint32_t *data;
+	uint32_t *tag;
+	bool *valid_bit;
+	int tag_size_bits;
+	int index_size_bits;
+	int index_mask;
+	int tag_mask;
+};
 
+struct Cache theCache;
 
 void memory_state_init(struct architectural_state* arch_state_ptr) {
     arch_state_ptr->memory = (uint32_t *) malloc(sizeof(uint32_t) * MEMORY_WORD_NUM);
@@ -17,8 +27,35 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
         memory_stats_init(arch_state_ptr, 0); // WARNING: we initialize for no cache 0
     }else {
         // CACHE ENABLED
-        assert(0); /// @students: Remove assert(0); and initialize cache
+		int cache_indices_size = cache_size/16;
 
+		// count number of bits to represent the indices
+		int cache_indices_nof_bits = -1;
+		theCache.index_mask = 0;
+
+		for(int i=0;i<15;i++) {
+			if(cache_indices_size == (1<<i)) {
+				cache_indices_nof_bits = i;
+				break;
+			}
+			theCache.index_mask += (1<<i);
+		}
+		assert(cache_indices_nof_bits != -1);
+		
+		// initialise sizes
+		theCache.index_size_bits = cache_indices_nof_bits;
+		theCache.tag_size_bits = 32-theCache.index_size_bits-4;
+
+		// initialise arrays
+		theCache.data = (uint32_t*)malloc((1<<theCache.index_size_bits)*16); // 4 words per block
+		theCache.tag = (uint32_t*)malloc(1<<theCache.index_size_bits); // tag fits in one word
+		theCache.valid_bit = (bool*)malloc(1<<theCache.index_size_bits);
+
+		// TODO check for unsigneds/ints problems
+		for(unsigned i=0;i<theCache.tag_size_bits;i++)
+			theCache.tag_mask += (((unsigned)1) << ((unsigned)(31-i))); 
+
+		memory_stats_init(arch_state_ptr, theCache.tag_size_bits);
         /// @students: memory_stats_init(arch_state_ptr, X); <-- fill # of tag bits for cache 'X' correctly
     }
 }
@@ -26,6 +63,7 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
 
 // returns data on memory[address / 4]
 int memory_read(int address){
+	assert(address%4==0);
     arch_state.mem_stats.lw_total++;
     check_address_is_word_aligned(address);
 
@@ -34,8 +72,13 @@ int memory_read(int address){
         return (int) arch_state.memory[address / 4];
     }else{
         // CACHE ENABLED
-        assert(0); /// @students: Remove assert(0); and implement Memory hierarchy w/ cache
 
+		int cache_idx = address&theCache.index_mask;
+		int tag = address&theCache.tag_mask;
+		if(theCache.tag[cache_idx] == tag) {
+			arch_state_ptr->mem_stats.lw_cache_hits++;
+			return theCache.
+		}
         /// @students: your implementation must properly increment: arch_state_ptr->mem_stats.lw_cache_hits
     }
     return 0;
