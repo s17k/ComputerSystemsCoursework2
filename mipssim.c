@@ -6,10 +6,6 @@
 |*************************************************************************************/
 
 #include "mipssim.h"
-#ifdef DUMP_STAN
-// TODO DELETE THIS WHEN SENDING 
-#include "dump.h"
-#endif
 
 #define BREAK_POINT 200000 // exit after so many cycles -- useful for debugging
 
@@ -325,11 +321,11 @@ void set_up_IR_meta(int IR, struct instr_meta *IR_meta)
 					IR_meta->reg_21_25, IR_meta->immediate, IR_meta->reg_16_20);
 			break;
 		case J:
-			printf("Executing J(%d), going to %d address", IR_meta->opcode,
+			printf("Executing J(%d), going to %d address\n", IR_meta->opcode,
 					IR_meta->jmp_offset);
 			break;
 		case BEQ:
-			printf("Executing BEQ(%d), if ($%u == $%u) set PC = PC + 4 + %d",
+			printf("Executing BEQ(%d), if ($%u == $%u) set PC = PC + 4 + %d\n",
 					IR_meta->opcode, IR_meta->reg_21_25, IR_meta->reg_16_20, 
 					IR_meta->immediate);
 			break;
@@ -391,8 +387,6 @@ int main(int argc, const char* argv[])
 
         assign_pipeline_registers_for_the_next_cycle();
 		
-		__dump(&arch_state);
-
        ///@students WARNING: Do NOT change/move/remove code below this point!
         marking_after_clock_cycle();
         arch_state.clock_cycle++;
