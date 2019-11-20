@@ -40,6 +40,7 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
 			}
 			theCache.index_mask += (1<<i);
 		}
+		theCache.index_mask = theCache.index_mask << 4;
 		assert(cache_indices_nof_bits != -1);
 		
 		// initialise sizes
@@ -60,6 +61,21 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
     }
 }
 
+int get_cache_idx(int address) {
+	return address&theCache.index_mask >> 4;
+}
+
+int get_cache_offset(int address) {
+	return address&15;
+}
+
+int get_cache_tag(int address) {
+	address&theCache.tag_mask >> (4 + theCache.index_size_bits);
+}
+
+bool address_in_cache(int address) {
+	return theCache.tag[get_cache_idx(address)] == get_cache_tag(address);
+}
 
 // returns data on memory[address / 4]
 int memory_read(int address){
@@ -72,16 +88,18 @@ int memory_read(int address){
         return (int) arch_state.memory[address / 4];
     }else{
         // CACHE ENABLED
+		int cache_idx = get_cache_idx(address);
+		int offset = get_cache_offset(address);
 
-		int cache_idx = address&theCache.index_mask;
-		int tag = address&theCache.tag_mask;
-		if(theCache.tag[cache_idx] == tag) {
-			arch_state_ptr->mem_stats.lw_cache_hits++;
-			return theCache.
+		if(address_in_cache(address)) {
+			arch_state.mem_stats.lw_cache_hits++;
+			return (int)theCache.data[cache_idx * 4 + offset/4];
+		} else {
+			theCache.data[cache_idx*4 + offset/4] = arch_state.memory[address/4];
+			return theCache.data[cache_idx*4 + offset/4];
 		}
         /// @students: your implementation must properly increment: arch_state_ptr->mem_stats.lw_cache_hits
     }
-    return 0;
 }
 
 // writes data on memory[address / 4]
@@ -94,8 +112,12 @@ void memory_write(int address, int write_data){
         arch_state.memory[address / 4] = (uint32_t) write_data;
     }else{
         // CACHE ENABLED
-        assert(0); /// @students: Remove assert(0); and implement Memory hierarchy w/ cache
-
+		arch_state.memory[address / 4] = (uint32_t) write_data; // as write-through
+		// update cache if it is in the cache - as write-no-allocate
+		if(address_in_cache(address)) {
+			arch_state.mem_stats.sw_cache_hits++;
+			theCache.data[get_cache_idx(address)*4 + get_cache_offset(address)/4] = (uint32_t) write_data;
+		}
         /// @students: your implementation must properly increment: arch_state_ptr->mem_stats.sw_cache_hits
     }
 }
