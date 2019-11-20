@@ -6,6 +6,10 @@
 |*************************************************************************************/
 
 #include "mipssim.h"
+#ifdef DUMP_STAN
+// TODO DELETE THIS WHEN SENDING 
+#include "dump.h"
+#endif
 
 #define BREAK_POINT 200000 // exit after so many cycles -- useful for debugging
 
@@ -160,7 +164,7 @@ void FSM()
 
 void instruction_fetch()
 {
-    if (arch_state.control.MemRead) {
+    if (arch_state.control.MemRead && (arch_state.control.IorD == 0)) {
         int address = arch_state.curr_pipe_regs.pc;
         arch_state.next_pipe_regs.IR = memory_read(address);
     }
@@ -212,6 +216,7 @@ void execute() // third cycle
             break; 
 		case 1:
 			next_pipe_regs->ALUOut = alu_opA - alu_opB;
+			break;
         case 2:
             if (IR_meta->function == ADD)
                 next_pipe_regs->ALUOut = alu_opA + alu_opB;
@@ -228,12 +233,14 @@ void execute() // third cycle
     switch (control->PCSource) {
         case 0: // normally, new ALUOut
             next_pipe_regs->pc = next_pipe_regs->ALUOut;
+			break;
         case 1: // for branch, old ALUOut
 			next_pipe_regs->pc = curr_pipe_regs->ALUOut;
+			break;
 		case 2: // jump, some weird shit
 			next_pipe_regs->pc = (int)(((unsigned int)curr_pipe_regs->pc) & (((unsigned int)15)*(1<<28))) + 
 				(((curr_pipe_regs->IR) & ((1<<26)-1))<<2);
-
+			break;
         default:
             assert(false);
     }
@@ -242,9 +249,10 @@ void execute() // third cycle
 
 void memory_access() {
   ///@students: appropriate calls to functions defined in memory_hierarchy.c must be added
-   int address = (arch_state.control.IorD==0) ? 
-			arch_state.curr_pipe_regs.pc : // 0
-			arch_state.curr_pipe_regs.ALUOut; // 1;
+  if(arch_state.control.IorD == 0) // if this is an instruction_fetch, no point in simulating this
+	  return;
+
+   int address = arch_state.curr_pipe_regs.ALUOut; // 1;
 
 	if(arch_state.control.MemWrite) {
 		int write_data = arch_state.curr_pipe_regs.B;
@@ -288,6 +296,7 @@ void set_up_IR_meta(int IR, struct instr_meta *IR_meta)
     IR_meta->reg_11_15 = (uint8_t) get_piece_of_a_word(IR, 11, REGISTER_ID_SIZE);
     IR_meta->reg_16_20 = (uint8_t) get_piece_of_a_word(IR, 16, REGISTER_ID_SIZE);
     IR_meta->reg_21_25 = (uint8_t) get_piece_of_a_word(IR, 21, REGISTER_ID_SIZE);
+	// is IR_meta going to be checked ?
     IR_meta->type = get_instruction_type(IR_meta->opcode);
 
     switch (IR_meta->opcode) {
@@ -295,12 +304,37 @@ void set_up_IR_meta(int IR, struct instr_meta *IR_meta)
             if (IR_meta->function == ADD)
                 printf("Executing ADD(%d), $%u = $%u + $%u (function: %u) \n",
                        IR_meta->opcode,  IR_meta->reg_11_15, IR_meta->reg_21_25,  IR_meta->reg_16_20, IR_meta->function);
-            else assert(false);
+            else if(IR_meta->function == SLT) {
+				printf("Executing SLT(%d), $%u = $%u < $%u (function: %u) \n",
+						IR_meta->opcode, IR_meta->reg_11_15, IR_meta->reg_21_25, IR_meta->reg_16_20, IR_meta->function);
+			} else
+				assert(false);
             break;
         case EOP:
             printf("Executing EOP(%d) \n", IR_meta->opcode);
             break;
-        default: assert(false);
+		case ADDI:
+			printf("Executing ADDI(%d), $%u = $%u + %d\n", IR_meta->opcode, 
+					IR_meta->reg_16_20, IR_meta->reg_21_25, IR_meta->immediate);
+			break;
+		case LW:
+			printf("Executing LW(%d), $%u = mem[$%u+%d] (index must be divisible by 4)\n", IR_meta->opcode, IR_meta->reg_16_20, IR_meta->reg_21_25, IR_meta->immediate);
+			break;
+		case SW:
+			printf("Executing SW(%d), mem[$%u+%d] = $%u\n", IR_meta->opcode, 
+					IR_meta->reg_21_25, IR_meta->immediate, IR_meta->reg_16_20);
+			break;
+		case J:
+			printf("Executing J(%d), going to %d address", IR_meta->opcode,
+					IR_meta->jmp_offset);
+			break;
+		case BEQ:
+			printf("Executing BEQ(%d), if ($%u == $%u) set PC = PC + 4 + %d",
+					IR_meta->opcode, IR_meta->reg_21_25, IR_meta->reg_16_20, 
+					IR_meta->immediate);
+			break;
+        default: 
+			assert(false);
     }
 }
 
@@ -356,7 +390,8 @@ int main(int argc, const char* argv[])
         write_back();
 
         assign_pipeline_registers_for_the_next_cycle();
-
+		
+		__dump(&arch_state);
 
        ///@students WARNING: Do NOT change/move/remove code below this point!
         marking_after_clock_cycle();
