@@ -33,12 +33,13 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
 		int cache_indices_nof_bits = -1;
 		theCache.index_mask = 0;
 
-		for(int i=0;i<15;i++) {
-			if(cache_indices_size == (1<<i)) {
-				cache_indices_nof_bits = i;
+		// cache is at most 16KB, therefore there will be at most 1000 rows (as each row has 16 bytes) so 15 is about 5 more than enough
+		for(int j=0;j<15;j++) {
+			if(cache_indices_size == (1<<j)) {
+				cache_indices_nof_bits = j;
 				break;
 			}
-			theCache.index_mask += (1<<i);
+			theCache.index_mask += (1<<j);
 		}
 		theCache.index_mask = theCache.index_mask << 4;
 		assert(cache_indices_nof_bits != -1);
@@ -51,6 +52,8 @@ void memory_state_init(struct architectural_state* arch_state_ptr) {
 		theCache.data = (uint32_t*)malloc((1<<theCache.index_size_bits)*16); // 4 words per block
 		theCache.tag = (uint32_t*)malloc(1<<theCache.index_size_bits); // tag fits in one word
 		theCache.valid_bit = (bool*)malloc(1<<theCache.index_size_bits);
+		for(int j=0;j<(1<<theCache.index_size_bits);j++)
+			theCache.valid_bit[j] = false;	
 
 		// TODO check for unsigneds/ints problems
 		for(unsigned i=0;i<theCache.tag_size_bits;i++)
@@ -74,11 +77,12 @@ int get_cache_tag(int address) {
 }
 
 bool address_in_cache(int address) {
-	return theCache.tag[get_cache_idx(address)] == get_cache_tag(address);
+	return theCache.valid_bit[get_cache_idx(address)] && (theCache.tag[get_cache_idx(address)] == get_cache_tag(address));
 }
 
 // returns data on memory[address / 4]
 int memory_read(int address){
+	//TODO check if this works if there is only one index -> therefore, there are no index blocks
 	assert(address%4==0);
     arch_state.mem_stats.lw_total++;
     check_address_is_word_aligned(address);
@@ -95,7 +99,11 @@ int memory_read(int address){
 			arch_state.mem_stats.lw_cache_hits++;
 			return (int)theCache.data[cache_idx * 4 + offset/4];
 		} else {
-			theCache.data[cache_idx*4 + offset/4] = arch_state.memory[address/4];
+			// copy the block, word by word
+			for(int i=0;i<4;i++) 
+				theCache.data[cache_idx*4 + i] = arch_state.memory[address / 4];
+			theCache.valid_bit[cache_idx] = 1;
+			theCache.tag[cache_idx] = get_cache_tag(address);
 			return theCache.data[cache_idx*4 + offset/4];
 		}
         /// @students: your implementation must properly increment: arch_state_ptr->mem_stats.lw_cache_hits
