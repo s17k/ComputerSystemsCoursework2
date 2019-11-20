@@ -124,10 +124,12 @@ void FSM()
 			else assert(false);
 			break;
 		case MEM_ACCESS_LD: // 3
+			control->MemRead = 1;
 			control->IorD = 1;
 			state = WB_STEP;
 			break;
 		case MEM_ACCESS_ST: // 5
+			control->MemWrite = 1;
 			control->IorD = 1;
 			state = INSTR_FETCH;
 			break;
